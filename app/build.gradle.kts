@@ -9,10 +9,12 @@ plugins {
 }
 
 android {
-  namespace = "com.aistudio.smokeshift.jbyvtx"
+  // Belső hivatkozás: visszarakva com.example-re
+  namespace = "com.example"
   compileSdk = 34
 
   defaultConfig {
+    // Külső azonosító: marad a tied!
     applicationId = "com.aistudio.smokeshift.jbyvtx"
     minSdk = 24
     targetSdk = 34
@@ -45,7 +47,6 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     getByName("debug") {
-      // Üresen hagyva, hogy az Android automatikusan a saját debug kulcsával írja alá
     }
   }
   
