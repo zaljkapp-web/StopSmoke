@@ -84,8 +84,8 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
 
   implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
-  implementation(libs.firebase.appcheck.recaptcha)
+  implementation(libs.firebase.vertexai)
+  implementation(libs.firebase.appcheck)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
