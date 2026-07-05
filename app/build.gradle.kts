@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.aistudio.smokeshift.jbyvtx"
   compileSdk = 34
 
   defaultConfig {
@@ -38,20 +38,22 @@ android {
   }
 
   buildTypes {
-    release {
+    getByName("release") {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug {
-      
+    getByName("debug") {
+      // Üresen hagyva, hogy az Android automatikusan a saját debug kulcsával írja alá
     }
   }
+  
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
+  
   buildFeatures {
     compose = true
     buildConfig = true
