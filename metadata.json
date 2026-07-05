@@ -1,0 +1,6 @@
+{
+  "name": "SmokeShift",
+  "description": "Dohányzás leszokást segítő alkalmazás folyamatos műszakbeosztáshoz tervezve, statisztikákkal és egyedi visszaszámlálóval.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
