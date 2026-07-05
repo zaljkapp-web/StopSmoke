@@ -3,7 +3,7 @@ name: Android Build 🚀
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # Ez a gomb, amivel manuálisan is elindíthatod
+  workflow_dispatch:
 
 jobs:
   build:
@@ -21,13 +21,15 @@ jobs:
         cache: gradle
 
     - name: Generate Gradle Wrapper
-      run: gradle wrapper
+      # Itt kényszerítjük rá a stabil 8.6-os verziót!
+      run: gradle wrapper --gradle-version 8.6
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+      # Itt pedig kikapcsoljuk a hisztis gyorsítótárat
+      run: ./gradlew assembleDebug --no-configuration-cache --stacktrace
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
