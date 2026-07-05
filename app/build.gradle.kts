@@ -2,6 +2,7 @@ import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesS
 
 plugins {
   alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlin.android)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.secrets)
@@ -9,12 +10,10 @@ plugins {
 }
 
 android {
-  // Belső hivatkozás: visszarakva com.example-re
   namespace = "com.example"
   compileSdk = 34
 
   defaultConfig {
-    // Külső azonosító: marad a tied!
     applicationId = "com.aistudio.smokeshift.jbyvtx"
     minSdk = 24
     targetSdk = 34
