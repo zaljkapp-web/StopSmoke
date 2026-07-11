@@ -34,6 +34,9 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.random.Random
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 @Composable
 fun DashboardScreen(
     viewModel: SmokingViewModel,
@@ -89,9 +92,10 @@ fun DashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(top = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // 1. Header

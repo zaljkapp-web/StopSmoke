@@ -59,6 +59,10 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val dbHelper = SmokingDatabaseHelper.getInstance(application)
         repository = SmokingRepository(dbHelper)
 
+        viewModelScope.launch {
+            com.example.data.AppSetupHelper.setupInitialStateIfNeeded(repository)
+        }
+
         // Combine flows to compute full state reactively
         viewModelScope.launch {
             combine(
@@ -121,8 +125,13 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val statsList = mutableListOf<DayStats>()
         var rollover = 0
         
-        // Iterate day-by-day from START_DATE to today (or smokingDay)
-        var d = SmokingScheduleHelper.START_DATE
+        // Iterate day-by-day from the first log date (or today) to today (or smokingDay)
+        val firstLogDateStr = logs.minByOrNull { it.timestamp }?.dateString
+        val firstLogDate = firstLogDateStr?.let { 
+            try { LocalDate.parse(it) } catch (e: Exception) { null }
+        } ?: smokingDay
+        
+        var d = maxOf(SmokingScheduleHelper.START_DATE, firstLogDate)
         val maxDay = maxOf(smokingDay, LocalDate.now())
         
         while (!d.isAfter(maxDay)) {
