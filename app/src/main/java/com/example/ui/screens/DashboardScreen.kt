@@ -53,16 +53,21 @@ fun DashboardScreen(
         currentQuote = CYNICAL_QUOTES[Random.nextInt(CYNICAL_QUOTES.size)]
     }
 
-    val totalSeconds = remember(state.nextAllowedTime) {
-        // Approximate total spacing interval for the dial progress
-        if (state.isDuringShift) {
-            val totalShiftSecs = 8 * 3600L // 8 hours shift as standard
-            val limit = state.dailyLimit.coerceAtLeast(1)
-            totalShiftSecs / limit
+    val totalSeconds = remember(state.lastCigaretteTime, state.nextAllowedTime, state.isDuringShift, state.dailyLimit) {
+        val last = state.lastCigaretteTime
+        val next = state.nextAllowedTime
+        if (last != null && next != null && next.isAfter(last)) {
+            java.time.temporal.ChronoUnit.SECONDS.between(last, next)
         } else {
-            val totalDaySecs = 16 * 3600L // 16 waking hours as standard
-            val limit = state.dailyLimit.coerceAtLeast(1)
-            totalDaySecs / limit
+            if (state.isDuringShift) {
+                val totalShiftSecs = 8 * 3600L // 8 hours shift as standard
+                val limit = state.dailyLimit.coerceAtLeast(1)
+                totalShiftSecs / limit
+            } else {
+                val totalDaySecs = 16 * 3600L // 16 waking hours as standard
+                val limit = state.dailyLimit.coerceAtLeast(1)
+                totalDaySecs / limit
+            }
         }
     }
 
@@ -188,7 +193,7 @@ fun DashboardScreen(
                             center = center
                         ),
                         startAngle = 140f,
-                        sweepAngle = 260f * (1f - animatedProgress),
+                        sweepAngle = 260f * animatedProgress,
                         useCenter = false,
                         style = Stroke(width = 24.dp.toPx(), cap = StrokeCap.Round)
                     )
