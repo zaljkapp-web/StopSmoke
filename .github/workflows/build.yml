@@ -13,16 +13,16 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
         cache: gradle
 
     - name: Generate Gradle Wrapper
-      # Itt kényszerítjük rá a stabil 8.6-os verziót!
-      run: gradle wrapper --gradle-version 8.6
+      # Frissítés a 9.3.1-es verzióra
+      run: gradle wrapper --gradle-version 9.3.1
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
