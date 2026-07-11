@@ -41,7 +41,9 @@ data class UiState(
     val currentOverride: DayOverride? = null,
     val logsToday: List<CigaretteLog> = emptyList(),
     val allLogs: List<CigaretteLog> = emptyList(),
-    val dayStatsList: List<DayStats> = emptyList()
+    val dayStatsList: List<DayStats> = emptyList(),
+    val lastCigaretteTime: LocalDateTime? = null,
+    val secondsSinceLastCigarette: Long = 0
 )
 
 class SmokingViewModel(application: Application) : AndroidViewModel(application) {
@@ -79,35 +81,30 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             while (true) {
                 delay(1000)
                 val state = _uiState.value
+                val now = LocalDateTime.now()
+                
                 val nextAllowed = state.nextAllowedTime
-                if (nextAllowed != null) {
-                    val now = LocalDateTime.now()
+                val timerSeconds = if (nextAllowed != null) {
                     val seconds = ChronoUnit.SECONDS.between(now, nextAllowed)
-                    if (seconds > 0) {
-                        _uiState.update {
-                            it.copy(
-                                timerSecondsRemaining = seconds,
-                                isTimerActive = true
-                            )
-                        }
-                    } else {
-                        if (state.isTimerActive) {
-                            // Just expired
-                            _uiState.update {
-                                it.copy(
-                                    timerSecondsRemaining = 0,
-                                    isTimerActive = false
-                                )
-                            }
-                        }
-                    }
+                    maxOf(0L, seconds)
                 } else {
-                    _uiState.update {
-                        it.copy(
-                            timerSecondsRemaining = 0,
-                            isTimerActive = false
-                        )
-                    }
+                    0L
+                }
+                
+                val lastCigTime = state.lastCigaretteTime
+                val secondsSinceLast = if (lastCigTime != null) {
+                    val seconds = ChronoUnit.SECONDS.between(lastCigTime, now)
+                    maxOf(0L, seconds)
+                } else {
+                    0L
+                }
+
+                _uiState.update {
+                    it.copy(
+                        timerSecondsRemaining = timerSeconds,
+                        isTimerActive = nextAllowed != null && timerSeconds > 0,
+                        secondsSinceLastCigarette = secondsSinceLast
+                    )
                 }
             }
         }
@@ -198,6 +195,19 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             0
         }
 
+        val lastLog = logs.maxByOrNull { it.timestamp }
+        val lastCigaretteTime = if (lastLog != null) {
+            LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(lastLog.timestamp), java.time.ZoneId.systemDefault())
+        } else {
+            null
+        }
+
+        val secondsSinceLastCigarette = if (lastCigaretteTime != null) {
+            max(0, ChronoUnit.SECONDS.between(lastCigaretteTime, now))
+        } else {
+            0L
+        }
+
         _uiState.update {
             it.copy(
                 currentSmokingDay = smokingDay,
@@ -216,7 +226,9 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                 currentOverride = currentOverride,
                 logsToday = logsToday,
                 allLogs = logs,
-                dayStatsList = statsList
+                dayStatsList = statsList,
+                lastCigaretteTime = lastCigaretteTime,
+                secondsSinceLastCigarette = secondsSinceLastCigarette
             )
         }
 

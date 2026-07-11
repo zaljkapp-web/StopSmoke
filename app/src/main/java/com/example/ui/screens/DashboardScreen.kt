@@ -232,6 +232,16 @@ fun DashboardScreen(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    
+                    if (state.lastCigaretteTime != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "ELŐZŐ ÓTA: ${formatRemainingTime(state.secondsSinceLastCigarette)}",
+                            color = TextPrimary.copy(alpha = 0.6f),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
