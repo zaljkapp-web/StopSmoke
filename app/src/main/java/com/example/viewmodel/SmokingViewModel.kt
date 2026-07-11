@@ -43,6 +43,7 @@ data class UiState(
     val allLogs: List<CigaretteLog> = emptyList(),
     val dayStatsList: List<DayStats> = emptyList(),
     val lastCigaretteTime: LocalDateTime? = null,
+    val needsInitialization: Boolean = false,
     val secondsSinceLastCigarette: Long = 0
 )
 
@@ -60,7 +61,6 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         repository = SmokingRepository(dbHelper)
 
         viewModelScope.launch {
-            com.example.data.AppSetupHelper.setupInitialStateIfNeeded(repository)
         }
 
         // Combine flows to compute full state reactively
@@ -237,7 +237,8 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                 allLogs = logs,
                 dayStatsList = statsList,
                 lastCigaretteTime = lastCigaretteTime,
-                secondsSinceLastCigarette = secondsSinceLastCigarette
+                secondsSinceLastCigarette = secondsSinceLastCigarette,
+                needsInitialization = logs.isEmpty()
             )
         }
 
@@ -425,6 +426,47 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             }
             // Reward with shift-end cig
             logCigarette("SHIFT_END")
+        }
+    }
+
+    fun completeInitialization(bonusCigarettes: Int, smokedToday: Int) {
+        viewModelScope.launch {
+            val today = LocalDate.now()
+            val yesterday = today.minusDays(1)
+            
+            val yesterdayLimit = SmokingScheduleHelper.getStandardLimit(yesterday)
+            val smokedYesterdayAmount = yesterdayLimit - bonusCigarettes
+            
+            // Log for yesterday to set up the exact bonus
+            repository.insertLog(
+                CigaretteLog(
+                    timestamp = LocalDateTime.now().minusDays(1).toEpochSecond(java.time.ZoneOffset.UTC) * 1000,
+                    amount = smokedYesterdayAmount,
+                    type = "INITIALIZATION",
+                    dateString = yesterday.toString()
+                )
+            )
+            
+            // Log for today's smoked cigarettes
+            if (smokedToday > 0) {
+                repository.insertLog(
+                    CigaretteLog(
+                        timestamp = System.currentTimeMillis() - 10000,
+                        amount = smokedToday,
+                        type = "INITIALIZATION",
+                        dateString = today.toString()
+                    )
+                )
+            } else {
+                repository.insertLog(
+                    CigaretteLog(
+                        timestamp = System.currentTimeMillis() - 10000,
+                        amount = 0,
+                        type = "INITIALIZATION",
+                        dateString = today.toString()
+                    )
+                )
+            }
         }
     }
 }
