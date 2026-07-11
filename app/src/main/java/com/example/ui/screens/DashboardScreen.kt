@@ -53,23 +53,7 @@ fun DashboardScreen(
         currentQuote = CYNICAL_QUOTES[Random.nextInt(CYNICAL_QUOTES.size)]
     }
 
-    val totalSeconds = remember(state.lastCigaretteTime, state.nextAllowedTime, state.isDuringShift, state.dailyLimit) {
-        val last = state.lastCigaretteTime
-        val next = state.nextAllowedTime
-        if (last != null && next != null && next.isAfter(last)) {
-            java.time.temporal.ChronoUnit.SECONDS.between(last, next)
-        } else {
-            if (state.isDuringShift) {
-                val totalShiftSecs = 8 * 3600L // 8 hours shift as standard
-                val limit = state.dailyLimit.coerceAtLeast(1)
-                totalShiftSecs / limit
-            } else {
-                val totalDaySecs = 16 * 3600L // 16 waking hours as standard
-                val limit = state.dailyLimit.coerceAtLeast(1)
-                totalDaySecs / limit
-            }
-        }
-    }
+    val totalSeconds = state.totalTimerSeconds
 
     val progress = remember(state.timerSecondsRemaining, totalSeconds) {
         if (totalSeconds > 0) {

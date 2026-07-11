@@ -34,6 +34,7 @@ data class UiState(
     val remainingToday: Int = 25,
     val nextAllowedTime: LocalDateTime? = null,
     val timerSecondsRemaining: Long = 0,
+    val totalTimerSeconds: Long = 0,
     val isTimerActive: Boolean = false,
     val isDuringShift: Boolean = false,
     val shiftStart: LocalDateTime? = null,
@@ -187,7 +188,7 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         }
 
         // Calculate timer / next allowed time
-        val nextAllowedTime = calculateNextAllowedTime(
+        val (nextAllowedTime, totalTimerSeconds) = calculateNextAllowedTime(
             now = now,
             smokingDay = smokingDay,
             activeShift = activeShift,
@@ -228,6 +229,7 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                 remainingToday = remainingToday,
                 nextAllowedTime = nextAllowedTime,
                 timerSecondsRemaining = secondsRemaining,
+                totalTimerSeconds = totalTimerSeconds,
                 isTimerActive = nextAllowedTime != null && secondsRemaining > 0,
                 isDuringShift = isDuringShift,
                 shiftStart = shiftTimes?.first,
@@ -255,48 +257,39 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         remainingCount: Int,
         logsToday: List<CigaretteLog>,
         currentOverride: DayOverride?
-    ): LocalDateTime? {
-        if (remainingCount <= 0) return null
-
+    ): Pair<LocalDateTime?, Long> {
+        if (remainingCount <= 0) return Pair(null, 0L)
         val closingTime = SmokingScheduleHelper.getClosingTime(smokingDay, activeShift)
-        if (now.isAfter(closingTime)) return null
+        if (now.isAfter(closingTime)) return Pair(null, 0L)
 
-        // If inside shift, calculate "műszakos számláló" (shift timer)
-        if (isDuringShift && shiftTimes != null) {
+        val lastLog = logsToday.maxByOrNull { it.timestamp }
+        val lastLogTime = lastLog?.let {
+            LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
+        }
+
+        val dayStart = closingTime.minusHours(16)
+        var baseTime = lastLogTime ?: dayStart
+
+        if (shiftTimes != null) {
+            val shiftStart = shiftTimes.first
             val shiftEnd = shiftTimes.second
-            val secondsLeftInShift = ChronoUnit.SECONDS.between(now, shiftEnd)
-            if (secondsLeftInShift > 0) {
-                val intervalSeconds = secondsLeftInShift / remainingCount
-                val lastLog = logsToday.maxByOrNull { it.timestamp }
-                val baseTime = if (lastLog != null) {
-                    val lastLogTime = LocalDateTime.ofEpochSecond(lastLog.timestamp / 1000, 0, java.time.ZoneOffset.UTC) // Approximate or just use last log trigger
-                    // To keep things simple and avoid time zone parsing mismatch,
-                    // if lastLog is within the current shift, we count from it.
-                    val lastLogLDT = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(lastLog.timestamp), java.time.ZoneId.systemDefault())
-                    if (lastLogLDT.isAfter(shiftTimes.first)) lastLogLDT else now
-                } else {
-                    now
-                }
-                val candidate = baseTime.plusSeconds(intervalSeconds)
-                return if (candidate.isAfter(shiftEnd)) shiftEnd else candidate
+
+            if (now.isAfter(shiftStart) && baseTime.isBefore(shiftStart)) {
+                baseTime = shiftStart
+            }
+            if (now.isAfter(shiftEnd) && baseTime.isBefore(shiftEnd)) {
+                baseTime = shiftEnd
             }
         }
 
-        // Standard timing (rest day, or before/after shift)
-        val secondsLeftInDay = ChronoUnit.SECONDS.between(now, closingTime)
-        if (secondsLeftInDay > 0) {
-            val intervalSeconds = secondsLeftInDay / remainingCount
-            val lastLog = logsToday.maxByOrNull { it.timestamp }
-            val baseTime = if (lastLog != null) {
-                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(lastLog.timestamp), java.time.ZoneId.systemDefault())
-            } else {
-                now
-            }
+        val secondsLeftAtBaseTime = ChronoUnit.SECONDS.between(baseTime, closingTime)
+        if (secondsLeftAtBaseTime > 0) {
+            val intervalSeconds = secondsLeftAtBaseTime / remainingCount
             val candidate = baseTime.plusSeconds(intervalSeconds)
-            return if (candidate.isAfter(closingTime)) closingTime else candidate
+            return Pair(if (candidate.isAfter(closingTime)) closingTime else candidate, intervalSeconds)
         }
 
-        return null
+        return Pair(null, 0L)
     }
 
     private fun scheduleSystemAlarms(
