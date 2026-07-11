@@ -27,6 +27,16 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Cache Debug Keystore
+      id: cache-keystore
+      uses: actions/cache@v4
+      with:
+        path: debug.keystore
+        key: debug-keystore-v1
+        
+    - name: Generate Debug Keystore
+      if: steps.cache-keystore.outputs.cache-hit != 'true'
+      run: keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "C=US, O=Android, CN=Android Debug"
     - name: Build Debug APK
       # Itt pedig kikapcsoljuk a hisztis gyorsítótárat
       run: ./gradlew assembleDebug --no-configuration-cache --stacktrace
