@@ -155,7 +155,8 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             val smoked = dayLogs.sumOf { it.amount }
             
             val totalLimit = baseLimit + rollover
-            val remaining = maxOf(0, totalLimit - smoked)
+            val actualRemaining = totalLimit - smoked
+            val displayRemaining = maxOf(0, actualRemaining)
             
             statsList.add(
                 DayStats(
@@ -164,14 +165,14 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                     rollover = rollover,
                     totalLimit = totalLimit,
                     smoked = smoked,
-                    remaining = remaining,
+                    remaining = displayRemaining,
                     activeShift = dActiveShift
                 )
             )
 
             // If it is before current smoking day, compute rollover for next day
             if (d.isBefore(smokingDay)) {
-                rollover = remaining
+                rollover = actualRemaining
             }
             
             d = d.plusDays(1)
@@ -190,8 +191,10 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val (nextAllowedTime, totalTimerSeconds) = calculateNextAllowedTime(
             now = now,
             smokingDay = smokingDay,
+            activeShift = activeShift,
             shiftTimes = shiftTimes,
-            remainingCount = remainingToday,
+            currentTotalLimit = currentTotalLimit,
+            smokedToday = smokedToday,
             logsToday = logsToday
         )
 
@@ -247,15 +250,24 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
     private fun calculateNextAllowedTime(
         now: LocalDateTime,
         smokingDay: LocalDate,
+        activeShift: ShiftType,
         shiftTimes: Pair<LocalDateTime, LocalDateTime>?,
-        remainingCount: Int,
+        currentTotalLimit: Int,
+        smokedToday: Int,
         logsToday: List<CigaretteLog>
     ): Pair<LocalDateTime?, Long> {
-        if (remainingCount <= 0) return Pair(null, 0L)
+        val remainingToday = maxOf(0, currentTotalLimit - smokedToday)
         
-        val closingTime = LocalDateTime.of(smokingDay.plusDays(1), java.time.LocalTime.MIDNIGHT)
+        val isNightShift = activeShift == ShiftType.NIGHT
+        
+        val windowEnd = if (isNightShift) {
+            LocalDateTime.of(smokingDay.plusDays(2), java.time.LocalTime.MIDNIGHT)
+        } else {
+            LocalDateTime.of(smokingDay.plusDays(1), java.time.LocalTime.MIDNIGHT)
+        }
+        
         val dayStart = LocalDateTime.of(smokingDay, java.time.LocalTime.MIDNIGHT)
-        if (now.isAfter(closingTime)) return Pair(null, 0L)
+        if (now.isAfter(windowEnd)) return Pair(null, 0L)
 
         val lastLog = logsToday.maxByOrNull { it.timestamp }
         val lastLogTime = lastLog?.let {
@@ -275,12 +287,23 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                 baseTime = shiftEnd
             }
         }
+        
+        val remainingCount = if (isNightShift) {
+            val tomorrowBaseLimit = SmokingScheduleHelper.getStandardLimit(smokingDay.plusDays(1))
+            val actualRemainingToday = currentTotalLimit - smokedToday
+            val remaining48h = actualRemainingToday + tomorrowBaseLimit
+            maxOf(0, remaining48h)
+        } else {
+            remainingToday
+        }
 
-        val secondsLeftAtBaseTime = ChronoUnit.SECONDS.between(baseTime, closingTime)
+        if (remainingCount <= 0) return Pair(null, 0L)
+
+        val secondsLeftAtBaseTime = ChronoUnit.SECONDS.between(baseTime, windowEnd)
         if (secondsLeftAtBaseTime > 0) {
             val intervalSeconds = secondsLeftAtBaseTime / remainingCount
             val candidate = baseTime.plusSeconds(intervalSeconds)
-            return Pair(if (candidate.isAfter(closingTime)) closingTime else candidate, intervalSeconds)
+            return Pair(if (candidate.isAfter(windowEnd)) windowEnd else candidate, intervalSeconds)
         }
 
         return Pair(null, 0L)
