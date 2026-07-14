@@ -119,14 +119,25 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val now = LocalDateTime.now()
         val overridesMap = overridesList.associateBy { it.dateString }
 
-        // 1. Determine current smoking day based on closing times
-        val smokingDay = SmokingScheduleHelper.getSmokingDayForTimestamp(now, overridesMap)
+        // 1. Determine shift context for UI based on original shift logic
+        val shiftDay = SmokingScheduleHelper.getSmokingDayForTimestamp(now, overridesMap)
+        val activeShift = SmokingScheduleHelper.getActiveShiftType(shiftDay, overridesMap[shiftDay.toString()])
+        val currentOverride = overridesMap[shiftDay.toString()]
+        val shiftTimes = SmokingScheduleHelper.getShiftTimes(shiftDay, activeShift, currentOverride)
+        val isDuringShift = if (shiftTimes != null) {
+            now.isAfter(shiftTimes.first) && now.isBefore(shiftTimes.second)
+        } else {
+            false
+        }
 
-        // 2. Compute historic & daily stats recursively to calculate rollover
+        // 2. The new requirement: 00:00 to 24:00 counting every day.
+        val smokingDay = now.toLocalDate() // STRICTLY today's calendar day
+
+        // 3. Compute historic & daily stats recursively to calculate rollover
         val statsList = mutableListOf<DayStats>()
         var rollover = 0
         
-        // Iterate day-by-day from the first log date (or today) to today (or smokingDay)
+        // Iterate day-by-day from the first log date (or today) to today
         val firstLogDateStr = logs.minByOrNull { it.timestamp }?.dateString
         val firstLogDate = firstLogDateStr?.let { 
             try { LocalDate.parse(it) } catch (e: Exception) { null }
@@ -138,14 +149,13 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         while (!d.isAfter(maxDay)) {
             val dStr = d.toString()
             val baseLimit = SmokingScheduleHelper.getStandardLimit(d)
-            val dayOverride = overridesMap[dStr]
-            val activeShift = SmokingScheduleHelper.getActiveShiftType(d, dayOverride)
+            val dActiveShift = SmokingScheduleHelper.getActiveShiftType(d, overridesMap[dStr])
             
             val dayLogs = logs.filter { it.dateString == dStr }
             val smoked = dayLogs.sumOf { it.amount }
             
             val totalLimit = baseLimit + rollover
-            val remaining = max(0, totalLimit - smoked)
+            val remaining = maxOf(0, totalLimit - smoked)
             
             statsList.add(
                 DayStats(
@@ -155,7 +165,7 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
                     totalLimit = totalLimit,
                     smoked = smoked,
                     remaining = remaining,
-                    activeShift = activeShift
+                    activeShift = dActiveShift
                 )
             )
 
@@ -174,33 +184,19 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val currentTotalLimit = currentBase + currentRollover
         val logsToday = logs.filter { it.dateString == smokingDay.toString() }
         val smokedToday = logsToday.sumOf { it.amount }
-        val remainingToday = max(0, currentTotalLimit - smokedToday)
-
-        val activeShift = SmokingScheduleHelper.getActiveShiftType(smokingDay, overridesMap[smokingDay.toString()])
-        val currentOverride = overridesMap[smokingDay.toString()]
-
-        // Shift boundaries
-        val shiftTimes = SmokingScheduleHelper.getShiftTimes(smokingDay, activeShift, currentOverride)
-        val isDuringShift = if (shiftTimes != null) {
-            now.isAfter(shiftTimes.first) && now.isBefore(shiftTimes.second)
-        } else {
-            false
-        }
+        val remainingToday = maxOf(0, currentTotalLimit - smokedToday)
 
         // Calculate timer / next allowed time
         val (nextAllowedTime, totalTimerSeconds) = calculateNextAllowedTime(
             now = now,
             smokingDay = smokingDay,
-            activeShift = activeShift,
             shiftTimes = shiftTimes,
-            isDuringShift = isDuringShift,
             remainingCount = remainingToday,
-            logsToday = logsToday,
-            currentOverride = currentOverride
+            logsToday = logsToday
         )
 
         val secondsRemaining = if (nextAllowedTime != null) {
-            max(0, ChronoUnit.SECONDS.between(now, nextAllowedTime))
+            maxOf(0, ChronoUnit.SECONDS.between(now, nextAllowedTime))
         } else {
             0
         }
@@ -213,7 +209,7 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         }
 
         val secondsSinceLastCigarette = if (lastCigaretteTime != null) {
-            max(0, ChronoUnit.SECONDS.between(lastCigaretteTime, now))
+            maxOf(0, ChronoUnit.SECONDS.between(lastCigaretteTime, now))
         } else {
             0L
         }
@@ -251,15 +247,14 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
     private fun calculateNextAllowedTime(
         now: LocalDateTime,
         smokingDay: LocalDate,
-        activeShift: ShiftType,
         shiftTimes: Pair<LocalDateTime, LocalDateTime>?,
-        isDuringShift: Boolean,
         remainingCount: Int,
-        logsToday: List<CigaretteLog>,
-        currentOverride: DayOverride?
+        logsToday: List<CigaretteLog>
     ): Pair<LocalDateTime?, Long> {
         if (remainingCount <= 0) return Pair(null, 0L)
-        val closingTime = SmokingScheduleHelper.getClosingTime(smokingDay, activeShift)
+        
+        val closingTime = LocalDateTime.of(smokingDay.plusDays(1), java.time.LocalTime.MIDNIGHT)
+        val dayStart = LocalDateTime.of(smokingDay, java.time.LocalTime.MIDNIGHT)
         if (now.isAfter(closingTime)) return Pair(null, 0L)
 
         val lastLog = logsToday.maxByOrNull { it.timestamp }
@@ -267,7 +262,6 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
         }
 
-        val dayStart = closingTime.minusHours(16)
         var baseTime = lastLogTime ?: dayStart
 
         if (shiftTimes != null) {
