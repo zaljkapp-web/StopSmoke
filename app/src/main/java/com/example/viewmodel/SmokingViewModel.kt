@@ -258,15 +258,10 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
     ): Pair<LocalDateTime?, Long> {
         val remainingToday = maxOf(0, currentTotalLimit - smokedToday)
         
-        val isNightShift = activeShift == ShiftType.NIGHT
-        
-        val windowEnd = if (isNightShift) {
-            LocalDateTime.of(smokingDay.plusDays(2), java.time.LocalTime.MIDNIGHT)
-        } else {
-            LocalDateTime.of(smokingDay.plusDays(1), java.time.LocalTime.MIDNIGHT)
-        }
-        
+        // 48-hour rolling window for every day
+        val windowEnd = LocalDateTime.of(smokingDay.plusDays(2), java.time.LocalTime.MIDNIGHT)
         val dayStart = LocalDateTime.of(smokingDay, java.time.LocalTime.MIDNIGHT)
+        
         if (now.isAfter(windowEnd)) return Pair(null, 0L)
 
         val lastLog = logsToday.maxByOrNull { it.timestamp }
@@ -288,14 +283,10 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         
-        val remainingCount = if (isNightShift) {
-            val tomorrowBaseLimit = SmokingScheduleHelper.getStandardLimit(smokingDay.plusDays(1))
-            val actualRemainingToday = currentTotalLimit - smokedToday
-            val remaining48h = actualRemainingToday + tomorrowBaseLimit
-            maxOf(0, remaining48h)
-        } else {
-            remainingToday
-        }
+        val tomorrowBaseLimit = SmokingScheduleHelper.getStandardLimit(smokingDay.plusDays(1))
+        val actualRemainingToday = currentTotalLimit - smokedToday
+        val remaining48h = actualRemainingToday + tomorrowBaseLimit
+        val remainingCount = maxOf(0, remaining48h)
 
         if (remainingCount <= 0) return Pair(null, 0L)
 
