@@ -56,9 +56,7 @@ object SmokingScheduleHelper {
      * Get standard daily limit for a date (before roll-over additions)
      */
     fun getStandardLimit(date: LocalDate): Int {
-        if (date.isBefore(START_DATE)) return 25
-        val weeks = ChronoUnit.DAYS.between(START_DATE, date) / 7
-        return (25 - weeks.toInt()).coerceAtLeast(1)
+        return 20
     }
 
     /**

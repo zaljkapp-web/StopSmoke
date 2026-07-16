@@ -125,13 +125,8 @@ fun DashboardScreen(
                                 .background(if (state.isDuringShift) AccentGreen else WarmGold, CircleShape)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        val closingText = if (state.activeShift == ShiftType.MORNING) {
-                            String.format("%02d:%02d", state.activeShift.closingHour, state.activeShift.closingMinute)
-                        } else {
-                            String.format("másnap %02d:%02d", state.activeShift.closingHour, state.activeShift.closingMinute)
-                        }
                         Text(
-                            text = "${state.activeShift.displayName} műszak (Vége: $closingText)",
+                            text = "${state.activeShift.displayName} műszak",
                             color = TextPrimary.copy(alpha = 0.7f),
                             fontSize = 12.sp
                         )
