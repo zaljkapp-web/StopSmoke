@@ -40,9 +40,6 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
-    if (state.needsInitialization) {
-        InitializationDialog(onComplete = { bonus, smoked -> viewModel.completeInitialization(bonus, smoked) })
-    }
 
     // Quotes logic: change quote every time we smoke or open
     var currentQuote by remember {
@@ -194,7 +191,7 @@ fun DashboardScreen(
                     
                     val timeStr = formatRemainingTime(state.timerSecondsRemaining)
                     Text(
-                        text = if (state.isTimerActive) timeStr else "KÉSZ",
+                        text = if (state.isTimerActive) timeStr else if (state.isWaitingForBonus || !state.isDuringShift) "KÉSZ" else "MEHETSZ!",
                         style = MaterialTheme.typography.displayMedium.copy(
                             fontWeight = FontWeight.Normal,
                             fontFamily = FontFamily.Monospace,
@@ -203,12 +200,21 @@ fun DashboardScreen(
                     )
                     
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "HÁTRALÉVŐ: ${state.remainingToday} SZÁL",
-                        color = WarmGold,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (state.isWaitingForBonus) {
+                        Text(
+                            text = "BÓNUSZ CIGI",
+                            color = AccentGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else if (!state.isDuringShift) {
+                        Text(
+                            text = "NINCS MŰSZAK",
+                            color = WarmGold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "ELŐZŐ ÓTA: ${formatRemainingTime(state.secondsSinceLastCigarette)}",
@@ -245,80 +251,31 @@ fun DashboardScreen(
                 }
             }
 
-            // 4. Quick Statistics Grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            // 4. Műszakban elszívott
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SlateCard, RoundedCornerShape(16.dp))
+                    .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                // Today's ratio
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(SlateCard, RoundedCornerShape(16.dp))
-                        .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
-                        .padding(14.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "NAPI MENNYISÉG",
-                            color = TextPrimary.copy(alpha = 0.5f),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = "${state.smokedToday}",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = IceBlue
-                            )
-                            Text(
-                                text = " / ${state.dailyLimit}",
-                                fontSize = 14.sp,
-                                color = TextPrimary.copy(alpha = 0.5f),
-                                modifier = Modifier.padding(bottom = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Rollover & Overtime indicator
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(SlateCard, RoundedCornerShape(16.dp))
-                        .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
-                        .padding(14.dp)
-                ) {
-                    Column {
-                        Text(
-                            text = "VISSZAMARADT / BÓNUSZ",
-                            color = TextPrimary.copy(alpha = 0.5f),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = if (state.rolloverCigarettes > 0) "+${state.rolloverCigarettes}" else "0",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (state.rolloverCigarettes > 0) AccentGreen else TextPrimary
-                            )
-                            Text(
-                                text = " szál tegnapról",
-                                fontSize = 11.sp,
-                                color = TextPrimary.copy(alpha = 0.5f),
-                                modifier = Modifier.padding(bottom = 3.dp, start = 4.dp)
-                            )
-                        }
-                    }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "MŰSZAKBAN ELSZÍVVA",
+                        color = TextPrimary.copy(alpha = 0.5f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "${state.smokedToday} SZÁL",
+                        color = TextPrimary,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
-
             // 5. Actions Bar
             Row(
                 modifier = Modifier

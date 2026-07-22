@@ -16,27 +16,20 @@ import kotlin.math.max
 
 data class DayStats(
     val date: LocalDate,
-    val baseLimit: Int,
-    val rollover: Int,
-    val totalLimit: Int,
     val smoked: Int,
-    val remaining: Int,
     val activeShift: ShiftType
 )
 
 data class UiState(
     val currentSmokingDay: LocalDate = LocalDate.now(),
     val activeShift: ShiftType = ShiftType.REST,
-    val baseLimit: Int = 25,
-    val rolloverCigarettes: Int = 0,
-    val dailyLimit: Int = 25,
     val smokedToday: Int = 0,
-    val remainingToday: Int = 25,
     val nextAllowedTime: LocalDateTime? = null,
     val timerSecondsRemaining: Long = 0,
-    val totalTimerSeconds: Long = 0,
+    val totalTimerSeconds: Long = 4200,
     val isTimerActive: Boolean = false,
     val isDuringShift: Boolean = false,
+    val isWaitingForBonus: Boolean = false,
     val shiftStart: LocalDateTime? = null,
     val shiftEnd: LocalDateTime? = null,
     val currentOverride: DayOverride? = null,
@@ -44,7 +37,6 @@ data class UiState(
     val allLogs: List<CigaretteLog> = emptyList(),
     val dayStatsList: List<DayStats> = emptyList(),
     val lastCigaretteTime: LocalDateTime? = null,
-    val needsInitialization: Boolean = false,
     val secondsSinceLastCigarette: Long = 0
 )
 
@@ -119,94 +111,104 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
         val now = LocalDateTime.now()
         val overridesMap = overridesList.associateBy { it.dateString }
 
-        // 1. Determine shift context for UI based on original shift logic
+        // Determine shift context
         val shiftDay = SmokingScheduleHelper.getSmokingDayForTimestamp(now, overridesMap)
         val activeShift = SmokingScheduleHelper.getActiveShiftType(shiftDay, overridesMap[shiftDay.toString()])
         val currentOverride = overridesMap[shiftDay.toString()]
         val shiftTimes = SmokingScheduleHelper.getShiftTimes(shiftDay, activeShift, currentOverride)
+        
         val isDuringShift = if (shiftTimes != null) {
             now.isAfter(shiftTimes.first) && now.isBefore(shiftTimes.second)
         } else {
             false
         }
 
-        // 2. The new requirement: 00:00 to 24:00 counting every day.
-        val smokingDay = now.toLocalDate() // STRICTLY today's calendar day
-
-        // 3. Compute historic & daily stats recursively to calculate rollover
+        // Build a simple day stats list for UI 
         val statsList = mutableListOf<DayStats>()
-        var rollover = 0
-        
-        // Iterate day-by-day from the first log date (or today) to today
         val firstLogDateStr = logs.minByOrNull { it.timestamp }?.dateString
         val firstLogDate = firstLogDateStr?.let { 
             try { LocalDate.parse(it) } catch (e: Exception) { null }
-        } ?: smokingDay
+        } ?: shiftDay
         
         var d = maxOf(SmokingScheduleHelper.START_DATE, firstLogDate)
-        val maxDay = maxOf(smokingDay, LocalDate.now())
+        val maxDay = maxOf(shiftDay, LocalDate.now())
         
         while (!d.isAfter(maxDay)) {
             val dStr = d.toString()
-            val baseLimit = SmokingScheduleHelper.getStandardLimit(d)
             val dActiveShift = SmokingScheduleHelper.getActiveShiftType(d, overridesMap[dStr])
             
-            val dayLogs = logs.filter { it.dateString == dStr }
-            val smoked = dayLogs.sumOf { it.amount }
+            val dShiftTimes = SmokingScheduleHelper.getShiftTimes(d, dActiveShift, overridesMap[dStr])
             
-            val totalLimit = baseLimit + rollover
-            val actualRemaining = totalLimit - smoked
-            val displayRemaining = maxOf(0, actualRemaining)
-            
+            val smoked = if (dShiftTimes != null) {
+                logs.filter {
+                    val logTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
+                    !logTime.isBefore(dShiftTimes.first) && !logTime.isAfter(dShiftTimes.second)
+                }.sumOf { it.amount }
+            } else {
+                0
+            }
+
             statsList.add(
                 DayStats(
                     date = d,
-                    baseLimit = baseLimit,
-                    rollover = rollover,
-                    totalLimit = totalLimit,
                     smoked = smoked,
-                    remaining = displayRemaining,
                     activeShift = dActiveShift
                 )
             )
-
-            // If it is before current smoking day, compute rollover for next day
-            if (d.isBefore(smokingDay)) {
-                rollover = actualRemaining
-            }
-            
             d = d.plusDays(1)
         }
 
-        // Current day's stats
-        val todayStats = statsList.firstOrNull { it.date == smokingDay }
-        val currentBase = todayStats?.baseLimit ?: SmokingScheduleHelper.getStandardLimit(smokingDay)
-        val currentRollover = rollover
-        val currentTotalLimit = currentBase + currentRollover
-        val logsToday = logs.filter { it.dateString == smokingDay.toString() }
-        val smokedToday = logsToday.sumOf { it.amount }
-        val remainingToday = maxOf(0, currentTotalLimit - smokedToday)
+        val logsTodayShift = if (shiftTimes != null) {
+            logs.filter {
+                val logTime = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
+                !logTime.isBefore(shiftTimes.first) && !logTime.isAfter(shiftTimes.second)
+            }
+        } else {
+            emptyList()
+        }
+        
+        val smokedToday = logsTodayShift.sumOf { it.amount }
 
-        // Calculate timer / next allowed time
-        val (nextAllowedTime, totalTimerSeconds) = calculateNextAllowedTime(
-            now = now,
-            smokingDay = smokingDay,
-            activeShift = activeShift,
-            shiftTimes = shiftTimes,
-            currentTotalLimit = currentTotalLimit,
-            smokedToday = smokedToday,
-            logsToday = logsToday
-        )
+        var nextAllowedTime: LocalDateTime? = null
+        var isWaitingForBonus = false
+        val totalTimerSeconds = 4200L
 
+        if (shiftTimes != null) {
+            val shiftStart = shiftTimes.first
+            val shiftEnd = shiftTimes.second
+            
+            val lastLog = logsTodayShift.maxByOrNull { it.timestamp }
+            val lastLogTime = lastLog?.let {
+                LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
+            }
+
+            if (isDuringShift) {
+                val baseTime = lastLogTime ?: shiftStart
+                nextAllowedTime = baseTime.plusMinutes(70)
+                if (nextAllowedTime!!.isAfter(shiftEnd)) {
+                    nextAllowedTime = shiftEnd
+                }
+            } else if (now.isAfter(shiftTimes.second)) {
+                // Shift has ended. Check if we have taken the bonus cigarette.
+                // We check if the last log is on or after the shift end.
+                if (lastLogTime != null && !lastLogTime.isBefore(shiftEnd)) {
+                    isWaitingForBonus = false
+                } else {
+                    isWaitingForBonus = true
+                    nextAllowedTime = shiftEnd // means 0 seconds remaining
+                }
+            }
+        }
+        
         val secondsRemaining = if (nextAllowedTime != null) {
             maxOf(0, ChronoUnit.SECONDS.between(now, nextAllowedTime))
         } else {
             0
         }
-
-        val lastLog = logs.maxByOrNull { it.timestamp }
-        val lastCigaretteTime = if (lastLog != null) {
-            LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(lastLog.timestamp), java.time.ZoneId.systemDefault())
+        
+        val globalLastLog = logs.maxByOrNull { it.timestamp }
+        val lastCigaretteTime = if (globalLastLog != null) {
+            LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(globalLastLog.timestamp), java.time.ZoneId.systemDefault())
         } else {
             null
         }
@@ -219,85 +221,27 @@ class SmokingViewModel(application: Application) : AndroidViewModel(application)
 
         _uiState.update {
             it.copy(
-                currentSmokingDay = smokingDay,
+                currentSmokingDay = shiftDay,
                 activeShift = activeShift,
-                baseLimit = currentBase,
-                rolloverCigarettes = currentRollover,
-                dailyLimit = currentTotalLimit,
                 smokedToday = smokedToday,
-                remainingToday = remainingToday,
                 nextAllowedTime = nextAllowedTime,
                 timerSecondsRemaining = secondsRemaining,
                 totalTimerSeconds = totalTimerSeconds,
                 isTimerActive = nextAllowedTime != null && secondsRemaining > 0,
                 isDuringShift = isDuringShift,
+                isWaitingForBonus = isWaitingForBonus,
                 shiftStart = shiftTimes?.first,
                 shiftEnd = shiftTimes?.second,
                 currentOverride = currentOverride,
-                logsToday = logsToday,
+                logsToday = logsTodayShift,
                 allLogs = logs,
                 dayStatsList = statsList,
                 lastCigaretteTime = lastCigaretteTime,
-                secondsSinceLastCigarette = secondsSinceLastCigarette,
-                needsInitialization = logs.isEmpty()
+                secondsSinceLastCigarette = secondsSinceLastCigarette
             )
         }
 
-        // Reschedule android system alarms for precise push notifications
-        scheduleSystemAlarms(smokingDay, activeShift, shiftTimes, nextAllowedTime)
-    }
-
-    private fun calculateNextAllowedTime(
-        now: LocalDateTime,
-        smokingDay: LocalDate,
-        activeShift: ShiftType,
-        shiftTimes: Pair<LocalDateTime, LocalDateTime>?,
-        currentTotalLimit: Int,
-        smokedToday: Int,
-        logsToday: List<CigaretteLog>
-    ): Pair<LocalDateTime?, Long> {
-        val remainingToday = maxOf(0, currentTotalLimit - smokedToday)
-        
-        // 48-hour rolling window for every day
-        val windowEnd = LocalDateTime.of(smokingDay.plusDays(2), java.time.LocalTime.MIDNIGHT)
-        val dayStart = LocalDateTime.of(smokingDay, java.time.LocalTime.MIDNIGHT)
-        
-        if (now.isAfter(windowEnd)) return Pair(null, 0L)
-
-        val lastLog = logsToday.maxByOrNull { it.timestamp }
-        val lastLogTime = lastLog?.let {
-            LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(it.timestamp), java.time.ZoneId.systemDefault())
-        }
-
-        var baseTime = lastLogTime ?: dayStart
-
-        if (shiftTimes != null) {
-            val shiftStart = shiftTimes.first
-            val shiftEnd = shiftTimes.second
-
-            if (now.isAfter(shiftStart) && baseTime.isBefore(shiftStart)) {
-                baseTime = shiftStart
-            }
-            if (now.isAfter(shiftEnd) && baseTime.isBefore(shiftEnd)) {
-                baseTime = shiftEnd
-            }
-        }
-        
-        val tomorrowBaseLimit = SmokingScheduleHelper.getStandardLimit(smokingDay.plusDays(1))
-        val actualRemainingToday = currentTotalLimit - smokedToday
-        val remaining48h = actualRemainingToday + tomorrowBaseLimit
-        val remainingCount = maxOf(0, remaining48h)
-
-        if (remainingCount <= 0) return Pair(null, 0L)
-
-        val secondsLeftAtBaseTime = ChronoUnit.SECONDS.between(baseTime, windowEnd)
-        if (secondsLeftAtBaseTime > 0) {
-            val intervalSeconds = secondsLeftAtBaseTime / remainingCount
-            val candidate = baseTime.plusSeconds(intervalSeconds)
-            return Pair(if (candidate.isAfter(windowEnd)) windowEnd else candidate, intervalSeconds)
-        }
-
-        return Pair(null, 0L)
+        scheduleSystemAlarms(shiftDay, activeShift, shiftTimes, nextAllowedTime)
     }
 
     private fun scheduleSystemAlarms(

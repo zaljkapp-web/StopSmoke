@@ -53,7 +53,7 @@ fun StatsScreen(
     val moneySaved = savedCount * pricePerCigarette
 
     // Streak calculation: days where smoked <= limit
-    val successfulDays = state.dayStatsList.count { it.smoked <= it.totalLimit }
+    val successfulDays = state.dayStatsList.count { it.smoked == 0 }
     val currentStreak = calculateCurrentStreak(state.dayStatsList)
 
     LazyColumn(
@@ -157,7 +157,7 @@ fun StatsScreen(
                         .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
-                    val maxVal = last7DaysStats.maxOfOrNull { max(it.totalLimit, it.smoked) }?.coerceAtLeast(1) ?: 25
+                    val maxVal = last7DaysStats.maxOfOrNull { it.smoked }?.coerceAtLeast(1) ?: 20
 
                     Row(
                         modifier = Modifier
@@ -185,13 +185,13 @@ fun StatsScreen(
                                     ) {
                                         // Max indicator
                                         val smokedHeightPct = (dayStat.smoked.toFloat() / maxVal.toFloat()).coerceIn(0f, 1f)
-                                        val limitHeightPct = (dayStat.totalLimit.toFloat() / maxVal.toFloat()).coerceIn(0f, 1f)
+                                        val limitHeightPct = (dayStat.smoked.toFloat() / maxVal.toFloat()).coerceIn(0f, 1f)
 
                                         Text(
                                             text = "${dayStat.smoked}",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (dayStat.smoked <= dayStat.totalLimit) IceBlue else AccentRed
+                                            color = IceBlue
                                         )
 
                                         Spacer(modifier = Modifier.height(4.dp))
@@ -202,7 +202,7 @@ fun StatsScreen(
                                                 .fillMaxHeight(smokedHeightPct)
                                                 .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
                                                 .background(
-                                                    if (dayStat.smoked <= dayStat.totalLimit) IceBlue else AccentRed
+                                                    IceBlue
                                                 )
                                         )
                                     }
@@ -321,7 +321,7 @@ fun LegendItem(color: Color, label: String) {
 @Composable
 fun HistoryItem(dayStat: DayStats) {
     val formatter = DateTimeFormatter.ofPattern("yyyy. MMMM dd., EEEE")
-    val isSuccess = dayStat.smoked <= dayStat.totalLimit
+    val isSuccess = true
 
     Box(
         modifier = Modifier
@@ -349,21 +349,13 @@ fun HistoryItem(dayStat: DayStats) {
                         color = TextPrimary.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
-                    if (dayStat.rollover > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Tegnapiról átvive: +${dayStat.rollover}",
-                            color = AccentGreen,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+
                 }
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "${dayStat.smoked} / ${dayStat.totalLimit} szál",
+                    text = "${dayStat.smoked} szál",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isSuccess) IceBlue else AccentRed
@@ -393,18 +385,5 @@ fun HistoryItem(dayStat: DayStats) {
  * Calculates current streak of days complying with the limit
  */
 fun calculateCurrentStreak(statsList: List<DayStats>): Int {
-    var streak = 0
-    val sorted = statsList.sortedByDescending { it.date }
-    // Skip today if today is not over and limit is not exceeded yet
-    for (stat in sorted) {
-        if (stat.date == LocalDate.now() && stat.smoked <= stat.totalLimit) {
-            continue
-        }
-        if (stat.smoked <= stat.totalLimit) {
-            streak++
-        } else {
-            break
-        }
-    }
-    return streak
+    return 0
 }
