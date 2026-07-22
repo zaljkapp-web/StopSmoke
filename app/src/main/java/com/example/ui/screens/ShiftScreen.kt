@@ -356,42 +356,5 @@ fun ShiftScreen(
             }
         }
 
-        // 28-day schedule explainer
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SlateCard.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, SlateBorder, RoundedCornerShape(16.dp))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "28 Napos Folyamatos Műszakrend",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = IceBlue
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "A műszakbeosztásod június 22-én kezdődött a következő körforgással:\n" +
-                                "• 6 nap délelőtt (Kezdés: 06:00, Zárás: 23:30)\n" +
-                                "• 1 nap pihenő (Zárás: másnap 00:30)\n" +
-                                "• 3 nap délután (Kezdés: 14:00, Zárás: másnap 01:00)\n" +
-                                "• 1 nap pihenő (Zárás: másnap 00:30)\n" +
-                                "• 4 nap éjszaka (Kezdés: 22:00, Zárás: másnap 09:00)\n" +
-                                "• 2 nap pihenő\n" +
-                                "• 4 nap délután\n" +
-                                "• 1 nap pihenő\n" +
-                                "• 3 nap éjszaka\n" +
-                                "• 3 nap pihenő\n\n" +
-                                "A heti limit csökkentést (hetente -1 szál) is ettől a naptól fogva számoljuk automatikusan.",
-                        fontSize = 11.sp,
-                        color = TextPrimary.copy(alpha = 0.7f),
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-        }
     }
 }

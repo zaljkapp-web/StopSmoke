@@ -40,21 +40,15 @@ fun StatsScreen(
     val state by viewModel.uiState.collectAsState()
 
     // 1. Calculate general statistics
-    val totalDays = max(1L, ChronoUnit.DAYS.between(com.example.data.SmokingScheduleHelper.START_DATE, LocalDate.now()) + 1)
-    val totalSmoked = state.allLogs.sumOf { it.amount }
+    val firstLogDateStr = state.allLogs.minByOrNull { it.timestamp }?.dateString
+    val firstLogDate = firstLogDateStr?.let { 
+        try { LocalDate.parse(it) } catch (e: Exception) { null }
+    } ?: LocalDate.now()
     
-    // Financial calculation: assuming average price of 1 cigarette is 120 Ft (2400 Ft / 20 pack)
-    val pricePerCigarette = 120
-    val moneySpent = totalSmoked * pricePerCigarette
+    val totalDays = max(1L, ChronoUnit.DAYS.between(firstLogDate, LocalDate.now()) + 1)
     
-    // Saved money: how much they saved by reducing from 25 cigarettes/day starting from June 22, 2026
-    val initialBaselineCount = totalDays * 25
-    val savedCount = max(0L, initialBaselineCount - totalSmoked)
-    val moneySaved = savedCount * pricePerCigarette
-
-    // Streak calculation: days where smoked <= limit
+    // Streak calculation: days where smoked == 0 (no smoking day) or whatever logic we need
     val successfulDays = state.dayStatsList.count { it.smoked == 0 }
-    val currentStreak = calculateCurrentStreak(state.dayStatsList)
 
     LazyColumn(
         modifier = modifier
@@ -74,12 +68,6 @@ fun StatsScreen(
                 ),
                 modifier = Modifier.padding(bottom = 4.dp)
             )
-            Text(
-                text = "Kövesd nyomon a fejlődésed a kezdetektől fogva (2026. június 22.)",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    color = TextPrimary.copy(alpha = 0.6f)
-                )
-            )
         }
 
         // Summary Cards Grid
@@ -94,26 +82,10 @@ fun StatsScreen(
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
-                        title = "BETARTOTT NAPOK",
+                        title = "MŰSZAKNÉLKÜLI NAPOK",
                         value = "$successfulDays nap",
                         icon = Icons.Default.TrendingDown,
                         iconTint = AccentGreen,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StatCard(
-                        title = "MEGTAKARÍTÁS",
-                        value = "${String.format("%,d", moneySaved)} Ft",
-                        icon = Icons.Default.Savings,
-                        iconTint = WarmGold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = "KÖLTÉS (MÉRGEKRE)",
-                        value = "${String.format("%,d", moneySpent)} Ft",
-                        icon = Icons.Default.AttachMoney,
-                        iconTint = AccentRed,
                         modifier = Modifier.weight(1f)
                     )
                 }
